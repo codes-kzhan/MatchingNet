@@ -1,8 +1,8 @@
 import numpy as np
 import tensorflow as tf
-import os
 from scipy import misc
 import mobilenet_v1
+import os
 
 
 class DataUtils:
@@ -48,14 +48,19 @@ class DataUtils:
 
 
 def get_feature_map(data_path, save_path, model_name="MOBILENET", model_dir="tmp/mobilenet_matchnet",
-                    pic_size=224, channel=3):
+                    pic_size=224, channel=3, old_data_path = None):
 
     features = tf.placeholder(tf.float32, shape=[None, pic_size, pic_size, channel])
 
     if model_name == "MOBILENET":
 
-        logits, _ = mobilenet_v1.mobilenet_v1(features, prediction_fn=None,
+        net, endpoints = mobilenet_v1.mobilenet_v1(features, prediction_fn=None,
                                           reuse=tf.AUTO_REUSE, scope='FeatureExtractor/MobilenetV1')
+
+        logits = endpoints['Logits']
+        # logits = tf.contrib.layers.flatten(logits)
+        # logits = endpoints['AvgPool_1a']
+
     elif model_name == "MNIST_MODEL":
 
         conv1 = tf.layers.conv2d(
@@ -139,8 +144,13 @@ def get_feature_map(data_path, save_path, model_name="MOBILENET", model_dir="tmp
             feature_map = sess.run(logits, feed_dict=feed_dict)
             feature_maps.append(feature_map)
 
-    np.savez(save_path, feature_maps=feature_maps, labels=labels)
+    # if old_data_path is not None:
+    #     old_data = np.load(old_data_path)
+    #     old_feature_maps = old_data["feature_maps"]
+    #     old_labels = old_data["labels"]
+
+    np.savez(save_path, feature_maps=np.squeeze(feature_maps), labels=labels)
     print("SAVED")
 
 
-# get_feature_map("dataset/test", "dataset/feature_maps/test.npz")
+get_feature_map("dataset/target", "dataset/feature_maps/target.npz")

@@ -1,23 +1,30 @@
+import numpy as np
 import tensorflow as tf
-import matchnet as mn
-import utils
-import os
+import matchnet
 
 
-def train(model_dir, train_data, val_data=None, possible_classes=5, shot=5,
-          batch_size=32, learning_rate=1e-3, val_gap=50):
+def main(support_set_path, target_path, model_dir):
 
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir)
+    support_set = np.load(support_set_path)
+    target = np.load(target_path)
 
-    model = mn.MatchingNet(possible_classes=possible_classes, shot=shot, fce=True,
-                           batch_size=batch_size)
+    def tranfer(raw_data):
+        raw_feature_maps = raw_data["feature_maps"]
+        raw_labels = raw_data["labels"]
+
+        shape = raw_feature_maps.shape
+
+        feature_maps = np.reshape(raw_feature_maps, (-1, shape[2], shape[3], shape[4]))
+        labels = np.reshape(np.array([[label] * shape[1] for label in raw_labels]), (-1))
+
+        return feature_maps, labels, shape[0], shape[1]
+
+    support_feature_maps, support_labels, possible_classes, shot = tranfer(support_set)
+    target_feature_maps, target_labels, _, _ = tranfer(target)
+
+    model = matchnet.MatchingNet(possible_classes=possible_classes, shot=shot,
+                                 fce=True, batch_size=1)
     model.build()
-
-    optim = tf.train.AdamOptimizer(learning_rate)
-    train_step = optim.minimize(model.loss)
-
-    global_step = tf.Variable(0, name='global_step', trainable=False)
 
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
@@ -29,58 +36,19 @@ def train(model_dir, train_data, val_data=None, possible_classes=5, shot=5,
         restorer.restore(sess, module_file)
         print("Done")
 
-    dataset_train = utils.DataUtils(train_data)
-    # dataset_val = utils.DataUtils(val_data)
+    loss = []
+    acc = []
+    for i in range(target_labels.shape[0]):
+        feed_dict = {model.x_hat_encode: target_feature_maps[i],
+                     model.y_hat_ind: target_labels[i],
+                     model.x_i_encode: support_feature_maps,
+                     model.y_i_ind: support_labels}
 
-    saver = tf.train.Saver(max_to_keep=3)
+        cur_loss, cur_acc = sess.run([model.loss, model.acc], feed_dict=feed_dict)
+        loss.append(cur_loss)
+        acc.append(cur_acc)
+        print("loss: ", cur_loss, "acc: ", cur_acc)
 
-    for i in range(int(1e7)):
-        mb_x_i_encode, mb_y_i, mb_x_hat_encode, mb_y_hat = dataset_train.get_batch(possible_classes=possible_classes,
-                                                                     shot=shot, batch_size=batch_size)
+    print("loss: ", np.mean(loss), "acc: ", np.mean(acc))
 
-        feed_dict = {model.x_hat_encode: mb_x_hat_encode,
-                     model.y_hat_ind: mb_y_hat,
-                     model.x_i_encode: mb_x_i_encode,
-                     model.y_i_ind: mb_y_i}
-
-        _, loss, acc = sess.run([train_step, model.loss, model.acc], feed_dict=feed_dict)
-
-        print(i, "loss: ", loss, "acc: ", acc)
-
-        if i % val_gap == 0 and not i == 0:
-
-            # mb_x_i, mb_y_i, mb_x_hat, mb_y_hat = dataset_val.get_batch(possible_classes=possible_classes,
-            #                                                          shot=shot, batch_size=batch_size)
-            # feed_dict = {model.x_hat_encode: mb_x_hat,
-            #              model.y_hat_ind: mb_y_hat,
-            #              model.x_i_encode: mb_x_i,
-            #              model.y_i_ind: mb_y_i}
-            # loss, acc = sess.run([model.loss, model.acc], feed_dict=feed_dict)
-
-            global_step += i
-            saver.save(sess, "tmp/mobilenet_fce/55", global_step=global_step)
-
-
-def evaluate(data_path):
-
-    model = mn.MatchingNet()
-    model.build()
-
-    dataset = utils.DataUtils(data_path)
-
-    sess = tf.Session()
-    sess.run(tf.global_variables_initializer())
-
-    mb_x_i_encode, mb_y_i, mb_x_hat_encode, mb_y_hat = dataset.get_batch(batch_size=1000)
-
-    feed_dict = {model.x_hat_encode: mb_x_hat_encode,
-                 model.y_hat_ind: mb_y_hat,
-                 model.x_i_encode: mb_x_i_encode,
-                 model.y_i_ind: mb_y_i}
-    acc = sess.run([model.acc], feed_dict=feed_dict)
-
-    print("acc: ", acc)
-
-
-# evaluate("dataset/feature_maps/feature_map_mobilenet.npz")
-train("tmp/mobilenet_fce", "dataset/feature_maps/val.npz")
+main("dataset/feature_maps/support_set.npz", "dataset/feature_maps/target.npz", "tmp/mobilenet_fce")

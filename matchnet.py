@@ -3,7 +3,7 @@ import tensorflow as tf
 
 class MatchingNet:
 
-    def __init__(self, shot=5, possible_classes=5, vector_size=1000,
+    def __init__(self, possible_classes=5, shot=5, vector_size=1000,
                  fce=False, batch_size=32, processing_steps=10):
 
         self.shot = shot
