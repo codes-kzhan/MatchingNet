@@ -1,3 +1,3 @@
 # MatchingNet
-Model as desribed in paper Matching Networks for One Shot Learning
+Model as desribed in paper Matching Networks for One Shot Learning     
 Uncompleted
