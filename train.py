@@ -1,17 +1,20 @@
 import tensorflow as tf
+from tensorflow.python import pywrap_tensorflow
 import matchnet as mn
 import utils
 import os
 
 
 def train(model_dir, train_data, val_data, possible_classes=5, shot=5,
-          batch_size=32, learning_rate=1e-3, val_gap=50):
+          batch_size=32, learning_rate=1e-3, val_gap=50, processing_steps=5,
+          vector_size=1000):
 
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
 
     model = mn.MatchingNet(possible_classes=possible_classes, shot=shot, fce=True,
-                           batch_size=batch_size, processing_steps=5)
+                           batch_size=batch_size, processing_steps=processing_steps,
+                           vector_size=vector_size)
     model.build()
 
     optim = tf.train.AdamOptimizer(learning_rate)
@@ -25,6 +28,11 @@ def train(model_dir, train_data, val_data, possible_classes=5, shot=5,
     module_file = tf.train.latest_checkpoint(model_dir)
     if module_file is not None:
         print("Load checkpoint from ", module_file)
+        reader = pywrap_tensorflow.NewCheckpointReader(module_file)
+        var_to_shape_map = reader.get_variable_to_shape_map()
+        for key in var_to_shape_map:
+            print("tensor_name: ", key)
+            print(reader.get_tensor(key).shape)
         restorer = tf.train.Saver()
         restorer.restore(sess, module_file)
         print("Done")
@@ -33,6 +41,7 @@ def train(model_dir, train_data, val_data, possible_classes=5, shot=5,
     dataset_val = utils.DataUtils(val_data)
 
     saver = tf.train.Saver(max_to_keep=3)
+    saver.save(sess, model_dir + "/55", global_step=global_step)
 
     for i in range(int(1e7)):
         mb_x_i_encode, mb_y_i, mb_x_hat_encode, mb_y_hat = dataset_train.get_batch(possible_classes=possible_classes,
@@ -64,7 +73,7 @@ def train(model_dir, train_data, val_data, possible_classes=5, shot=5,
 
 def evaluate(data_path, model_dir):
 
-    model = mn.MatchingNet(batch_size=1000)
+    model = mn.MatchingNet(batch_size=5, vector_size=1024)
     model.build()
 
     dataset = utils.DataUtils(data_path)
@@ -90,6 +99,7 @@ def evaluate(data_path, model_dir):
     print("acc: ", acc)
 
 
-# evaluate("dataset/feature_maps/feature_map_c13_train.npz", None)
-train("tmp/mobilenet_fce_5p", "dataset/feature_maps/feature_map_train.npz",
-      "dataset/feature_maps/feature_map_val.npz", learning_rate=1e-4)
+# evaluate("dataset/feature_maps/mobilenet/specific_train.npz", None)
+evaluate("dataset/feature_maps/feature_map_omni.npz", None)
+# train("tmp/mobilenet_fce_adam", "dataset/feature_maps/tiny imagenet/train.npz",
+#       "dataset/feature_maps/feature_map_val.npz", learning_rate=1e-3, processing_steps=10)

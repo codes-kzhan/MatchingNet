@@ -8,22 +8,32 @@ def main(support_set_path, target_path, model_dir):
     support_set = np.load(support_set_path)
     target = np.load(target_path)
 
-    def tranfer(raw_data):
-        raw_feature_maps = raw_data["feature_maps"]
-        raw_labels = raw_data["labels"]
+    support_feature_maps = support_set["feature_maps"]
+    support_label_map = support_set["labels"]
+    target_feature_maps = target["feature_maps"]
+    target_label_map = target["labels"]
 
-        shape = raw_feature_maps.shape
+    support_shape = support_feature_maps.shape
+    target_shape = target_feature_maps.shape
 
-        feature_maps = np.reshape(raw_feature_maps, (-1, shape[2], shape[3], shape[4]))
-        labels = np.reshape(np.array([[label] * shape[1] for label in raw_labels]), (-1))
+    possible_classes = support_shape[0]
+    shot = support_shape[1]
+    batch_size = target_shape[0] * target_shape[1]
 
-        return feature_maps, labels, shape[0], shape[1]
+    support_feature_maps = [np.reshape(support_feature_maps, (-1, support_shape[2]))] * batch_size
+    target_feature_maps = np.reshape(target_feature_maps, (-1, target_shape[2]))
 
-    support_feature_maps, support_labels, possible_classes, shot = tranfer(support_set)
-    target_feature_maps, target_labels, _, _ = tranfer(target)
+    support_labels = []
+    for i in range(possible_classes):
+        support_labels.extend([i] * shot)
+    support_labels = [support_labels] * batch_size
+
+    target_labels = []
+    for label in target_label_map:
+        target_labels.extend(list(np.where(support_label_map == label)[0]) * target_shape[1])
 
     model = matchnet.MatchingNet(possible_classes=possible_classes, shot=shot,
-                                 fce=True, batch_size=1)
+                                 fce=True, batch_size=batch_size)
     model.build()
 
     sess = tf.Session()
@@ -36,19 +46,13 @@ def main(support_set_path, target_path, model_dir):
         restorer.restore(sess, module_file)
         print("Done")
 
-    loss = []
-    acc = []
-    for i in range(target_labels.shape[0]):
-        feed_dict = {model.x_hat_encode: target_feature_maps[i],
-                     model.y_hat_ind: target_labels[i],
-                     model.x_i_encode: support_feature_maps,
-                     model.y_i_ind: support_labels}
+    feed_dict = {model.x_hat_encode: target_feature_maps,
+                 model.y_hat_ind: target_labels,
+                 model.x_i_encode: support_feature_maps,
+                 model.y_i_ind: support_labels}
 
-        cur_loss, cur_acc = sess.run([model.loss, model.acc], feed_dict=feed_dict)
-        loss.append(cur_loss)
-        acc.append(cur_acc)
-        print("loss: ", cur_loss, "acc: ", cur_acc)
+    loss, acc = sess.run([model.loss, model.acc], feed_dict=feed_dict)
+    print("loss: ", loss, "acc: ", acc)
 
-    print("loss: ", np.mean(loss), "acc: ", np.mean(acc))
 
 main("dataset/feature_maps/support_set.npz", "dataset/feature_maps/target.npz", "tmp/mobilenet_fce")

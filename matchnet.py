@@ -1,3 +1,7 @@
+"""Matching Net Model
+As describe in the paper Matching Networks for One Shot Learning, https://arxiv.org/abs/1606.04080
+Consulting the code from github repository markdtw/matching-networks"""
+
 import tensorflow as tf
 
 
@@ -5,6 +9,15 @@ class MatchingNet:
 
     def __init__(self, possible_classes=5, shot=5, vector_size=1000,
                  fce=False, batch_size=32, processing_steps=10):
+
+        """
+        :param possible_classes: classes in the support set
+        :param shot: pictures per class in the support set
+        :param vector_size: size of output vector from the base model
+        :param fce: whether to use full context embeddings
+        :param batch_size: batch size
+        :param processing_steps: processing steps in the fully conditional embedding f 
+        """
 
         self.shot = shot
         self.possible_classes = possible_classes
@@ -26,6 +39,13 @@ class MatchingNet:
         self.loss = None
 
     def fce_g(self, x_i_encode):
+        """
+        The Fully Conditional Embedding g 
+        A bidirectional LSTM
+        For interpret the support set as a whole
+        :param x_i_encode: support set data encoded by the base model
+        :return: 
+        """
 
         fw_cell = tf.contrib.rnn.BasicLSTMCell(self.vector_size / 2)
         bw_cell = tf.contrib.rnn.BasicLSTMCell(self.vector_size / 2)
@@ -36,6 +56,12 @@ class MatchingNet:
         return tf.add(tf.stack(x_i_encode), tf.stack(outputs))
 
     def fce_f(self, x_hat_encode, g_embedding):
+        """
+        The Fully Conditional Embedding f
+        :param x_hat_encode: target data encoded by the base model
+        :param g_embedding: 
+        :return: 
+        """
         cell = tf.contrib.rnn.BasicLSTMCell(self.vector_size)
         prev_state = cell.zero_state(self.batch_size, tf.float32)
 
@@ -52,7 +78,12 @@ class MatchingNet:
         return output
 
     def __cosine_similarity(self, f_embedding, g_embedding):
-
+        """
+        Calculate cosine similarity
+        :param f_embedding: 
+        :param g_embedding: 
+        :return: 
+        """
         cos_sim_list = []
         for i in tf.unstack(g_embedding):
             target_normed = f_embedding
